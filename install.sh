@@ -15,6 +15,29 @@ fail()  { printf "\033[1;31m✗\033[0m %s\n" "$*" >&2; exit 1; }
 # ── Sanity ───────────────────────────────────────────────────
 [[ "$(uname -s)" == "Darwin" ]] || fail "This script is macOS-only."
 
+# ── Xcode Command Line Tools ─────────────────────────────────
+# On a fresh Mac /usr/bin/git is just a stub that triggers a GUI dialog
+# the first time it's invoked. We can't rely on `command -v git` — we
+# must check `xcode-select -p` for the real install. Do this BEFORE
+# anything else so the rest of the script can assume git/curl/etc. work.
+ensure_xcode_clt() {
+  if xcode-select -p >/dev/null 2>&1; then
+    return 0
+  fi
+  say "Installing Xcode Command Line Tools"
+  echo "    A macOS dialog will appear — click 'Install' and accept the license."
+  echo "    The download takes 5–15 minutes depending on your connection."
+  xcode-select --install 2>/dev/null || true
+  # Wait until the install actually completes. The dialog is async.
+  until xcode-select -p >/dev/null 2>&1; do
+    sleep 10
+    echo -n "."
+  done
+  echo
+  ok "Xcode Command Line Tools installed"
+}
+ensure_xcode_clt
+
 # ── Locate the repo ──────────────────────────────────────────
 # When piped from curl, $0 is "bash" — clone the repo so we have
 # the Brewfile / zshrc / gitconfig.template alongside us.
@@ -28,12 +51,6 @@ else
   if [[ -d "$REPO_DIR/.git" ]]; then
     git -C "$REPO_DIR" pull --ff-only || warn "git pull failed, using existing checkout"
   else
-    # git is part of Xcode CLT, which we install below if missing.
-    if ! command -v git >/dev/null 2>&1; then
-      say "Installing Xcode Command Line Tools (needed for git)"
-      xcode-select --install 2>/dev/null || true
-      until xcode-select -p >/dev/null 2>&1; do sleep 5; done
-    fi
     git clone --depth 1 "$REPO_URL" "$REPO_DIR"
   fi
   BOOTSTRAP_DIR="$REPO_DIR"
@@ -55,14 +72,6 @@ read -rp "  Full name (e.g. Ada Lovelace): " FULL_NAME
 read -rp "  Email (the one tied to your GitHub account): " EMAIL
 read -rp "  GitHub username: " GH_USER
 [[ -z "$FULL_NAME" || -z "$EMAIL" || -z "$GH_USER" ]] && fail "All three fields are required."
-
-# ── Xcode CLT (if not already installed above) ───────────────
-if ! xcode-select -p >/dev/null 2>&1; then
-  say "Installing Xcode Command Line Tools"
-  xcode-select --install 2>/dev/null || true
-  until xcode-select -p >/dev/null 2>&1; do sleep 5; done
-fi
-ok "Xcode Command Line Tools present"
 
 # ── Homebrew ─────────────────────────────────────────────────
 if ! command -v brew >/dev/null 2>&1; then
