@@ -88,9 +88,23 @@ read -rp "  Email (the one tied to your GitHub account): " EMAIL
 read -rp "  GitHub username: " GH_USER
 [[ -z "$FULL_NAME" || -z "$EMAIL" || -z "$GH_USER" ]] && fail "All three fields are required."
 
+# ── Prime sudo (required for Homebrew + casks) ───────────────
+# Homebrew's NONINTERACTIVE=1 mode requires sudo to be already cached
+# (it runs `sudo -n -v` and aborts with a misleading "needs to be an
+# Administrator" error otherwise). Prompting once here also avoids a
+# dozen sudo prompts later when casks install into /Applications.
+say "Authorize sudo for the rest of the install"
+echo "    Enter your macOS password (the one you use to log in)."
+sudo -v
+# Keep sudo alive for the duration of the script. The background loop
+# refreshes the timestamp every minute and exits when this script does.
+( while true; do sudo -n true; sleep 60; kill -0 "$$" 2>/dev/null || exit; done ) 2>/dev/null &
+SUDO_KEEPALIVE_PID=$!
+trap 'kill $SUDO_KEEPALIVE_PID 2>/dev/null || true' EXIT
+
 # ── Homebrew ─────────────────────────────────────────────────
 if ! command -v brew >/dev/null 2>&1; then
-  say "Installing Homebrew (non-interactive)"
+  say "Installing Homebrew (non-interactive — sudo is already primed)"
   NONINTERACTIVE=1 /bin/bash -c \
     "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 fi
