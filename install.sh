@@ -14,6 +14,21 @@ fail()  { printf "\033[1;31m✗\033[0m %s\n" "$*" >&2; exit 1; }
 
 # ── Sanity ───────────────────────────────────────────────────
 [[ "$(uname -s)" == "Darwin" ]] || fail "This script is macOS-only."
+[[ $EUID -ne 0 ]] || fail "Don't run this with sudo. Run as your normal user — Homebrew refuses root."
+
+# Homebrew needs the user to be a macOS Administrator (so it can sudo to
+# chown /opt/homebrew). Standard users can't install — fail fast with a
+# clear message instead of letting them sit through the Xcode CLT download
+# only to hit Homebrew's "Need sudo access" error.
+if ! dseditgroup -o checkmember -m "$USER" admin >/dev/null 2>&1; then
+  fail "Your macOS user '$USER' is not an Administrator.
+    Homebrew can't install without admin rights.
+
+    Fix: System Settings → Users & Groups → click (i) next to '$USER' →
+    enable 'Allow this user to administer this computer'.
+    You'll need an existing admin account's password.
+    Log out and back in, then re-run this script."
+fi
 
 # ── Xcode Command Line Tools ─────────────────────────────────
 # On a fresh Mac /usr/bin/git is just a stub that triggers a GUI dialog
